@@ -1,0 +1,98 @@
+from skmultilearn.adapt import MLkNN
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, hamming_loss, zero_one_loss, coverage_error, label_ranking_loss, average_precision_score, jaccard_score
+import pandas as pd
+import numpy as np
+import os
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.metrics import multilabel_confusion_matrix
+# 假设你的数据集已经准备好，包括训练集和本地测试集
+
+# 1. 读取训练数据集
+# 2. 分割训练集为特征(X_train)和标签(y_train)
+# 3. 用MLKNN算法训练模型
+# 4. 读取本地测试数据集
+# 5. 分割测试集为特征(X_test)和标签(y_test)
+# 6. 使用训练好的模型进行预测
+# 7. 计算多标签分类的性能指标
+# 读取训练数据集
+# 假设你的数据集是CSV格式的文件
+train_data = pd.read_csv("L:/experimental_data/data_combine/output_file/sampled_data_multi1.csv")
+# 分割训练集为特征(X_train)和标签(y_train)
+X_train = train_data.iloc[:, :10]  # 假设前10列是特征
+y_train = train_data.iloc[:, 10:]  # 假设后4列是标签
+# 用MLKNN算法训练模型
+mlknn = MLkNN(k=10)
+mlknn.fit(X_train.values, y_train.values)
+# 读取本地测试数据集
+test_data = pd.read_csv("L:/experimental_data/data_combine/output_file/sampled_data_single1.csv")
+# 分割测试集为特征(X_test)和标签(y_test)
+X_test = test_data.iloc[:, :10]  # 假设前10列是特征
+y_test_true = test_data.iloc[:, 10:]  # 假设后4列是标签
+# 使用训练好的模型进行预测
+y_test_pred = mlknn.predict(X_test.values).toarray()
+# 计算多标签分类的性能指标
+accuracy = accuracy_score(y_test_true, y_test_pred)
+precision = precision_score(y_test_true, y_test_pred, average='micro')
+recall = recall_score(y_test_true, y_test_pred, average='micro')
+f1 = f1_score(y_test_true, y_test_pred, average='micro')
+hamming = hamming_loss(y_test_true, y_test_pred)
+zero_one = zero_one_loss(y_test_true, y_test_pred)
+coverage = coverage_error(y_test_true, y_test_pred)
+ranking = label_ranking_loss(y_test_true, y_test_pred)
+average_precision = average_precision_score(y_test_true, y_test_pred, average='micro')
+jaccard = jaccard_score(y_test_true, y_test_pred, average='micro')
+# 打印性能指标
+print(f"Accuracy: {accuracy}")
+print(f"Precision: {precision}")
+print(f"Recall: {recall}")
+print(f"F1 Score: {f1}")
+print(f"Hamming Loss: {hamming}")
+print(f"0-1 Loss: {zero_one}")
+print(f"Coverage Error: {coverage}")
+print(f"Ranking Loss: {ranking}")
+print(f"Average Precision: {average_precision}")
+print(f"Jaccard Score: {jaccard}")
+# 创建 DataFrame
+predictions_df = pd.DataFrame.from_records(y_test_pred, columns=['predict1', 'predict2', 'predict3', 'predict4'])
+result_df = pd.concat([pd.DataFrame(X_test, columns=['T_com_out','T_con_in','T_con_out','T_cap_in','T_cap_out','T_eva_in','T_eva_out','T_com_in','T_eva_outlet','power']),
+                      pd.DataFrame(y_test_true, columns=['class1','class2', 'class3', 'class4']),predictions_df], axis=1)
+result_df.to_csv('L:/experimental_data/data_combine/output_file/MLKNN/multi_single/predictions.csv', index=False)
+# 将性能指标保存到本地文件
+performance_metrics = pd.DataFrame({
+    'Accuracy': [accuracy],
+    'Precision': [precision],
+    'Recall': [recall],
+    'F1 Score': [f1],
+    'Hamming Loss': [hamming],
+    '0-1 Loss': [zero_one],
+    'Coverage Error': [coverage],
+    'Ranking Loss': [ranking],
+    'Average Precision': [average_precision],
+    'Jaccard Score': [jaccard]
+})
+performance_metrics.to_csv("L:/experimental_data/data_combine/output_file/MLKNN/multi_single/performance_metrics.csv", index=False)
+# 计算多标签分类的混淆矩阵
+confusion_matrices = multilabel_confusion_matrix(y_test_true, y_test_pred)
+output_folder = 'L:/experimental_data/data_combine/output_file/MLKNN/multi_single'
+os.makedirs(output_folder, exist_ok=True)
+# 设置字体大小
+font_size = 18
+# 可视化混淆矩阵并保存到文件夹
+for i, conf_matrix in enumerate(confusion_matrices):
+    label_name = f'标签{i+1}'
+    plt.figure(figsize=(9, 7))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['0', '1'], yticklabels=['0', '1'],
+                annot_kws={"size": 20, "ha": 'center', "va": 'center'},
+                cbar_kws={"label": " ", "orientation": "vertical", "shrink": 1, "extend": "both", "anchor": (0.5, 1.0)})
+    plt.title(f'混淆矩阵{i+1}', fontsize=20)
+    plt.xlabel('预测标签',fontsize=font_size)
+    plt.ylabel('实际标签',fontsize=font_size)
+     # 设置混淆矩阵标签字体大小
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    plt.savefig(os.path.join(output_folder, f'confusion_matrix_{label_name}.png'))
+    plt.close()
+print(f'混淆矩阵图已保存到文件夹: {output_folder}')
