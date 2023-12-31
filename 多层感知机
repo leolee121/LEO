@@ -8,3 +8,68 @@ import os
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+# 假设你的训练集是X_train和y_train，测试集是X_test
+# X_train和X_test的每行是一个样本，包括十种特征
+# y_train是多标签二维数组，每行代表一个样本的四种标签A、B、C、D
+# 1. 加载训练集和测试集
+train_file_path = 'L:/experimental_data/data_combine/output_file/sampled_data_multi1.csv'
+test_file_path = 'L:/experimental_data/data_combine/output_file/sampled_data_single1.csv'
+train_data = pd.read_csv(train_file_path)
+test_data = pd.read_csv(test_file_path)
+# 2. 划分训练集为训练和验证集
+X_train, X_val, y_train, y_val = train_test_split(
+    train_data.iloc[:, :10],  # 选择前10列作为特征
+    train_data.iloc[:, 10:],  # 选择从第11列开始到最后作为标签
+    test_size=0.2,
+    random_state=42
+)
+# 初始化多层感知机分类器
+classifier = BinaryRelevance(classifier=MLPClassifier(), require_dense=[True,True])
+# 4. 设置MLP超参数搜索范围
+param_grid = {
+    'classifier__hidden_layer_sizes': [(50,), (100,), (50, 50), (100, 50)],
+    'classifier__activation': ['relu', 'tanh'],
+    'classifier__alpha': [0.0001, 0.001, 0.01],
+}
+# 使用label_ranking_average_precision_score作为评估指标
+scorer = make_scorer(label_ranking_average_precision_score, greater_is_better=True, needs_proba=True)
+# 5. 使用GridSearchCV进行超参数调优
+grid_search = GridSearchCV(classifier, param_grid, scoring=scorer, cv=3)
+X_train_dense = X_train.toarray()
+grid_search.fit(X_train_dense, y_train)
+# 获取最佳超参数
+best_params = grid_search.best_params_
+# 输出最佳超参数
+print("最佳超参数:", best_params)
+# 转换为数据框
+df_best_params = pd.DataFrame([best_params])
+# 保存为CSV文件
+df_best_params.to_csv('L:/experimental_data/data_combine/output_file/Binary_Relevance/multi_single/best_params.csv', index=False)
+# 6. 获取最佳模型
+best_classifier = grid_search.best_estimator_
+# 7. 在测试集上进行预测
+y_test_pred = best_classifier.predict(X_test)
+# 8. 评估性能
+accuracy = accuracy_score(y_test, y_test_pred)
+precision = precision_score(y_test, y_test_pred, average='micro')
+recall = recall_score(y_test, y_test_pred, average='micro')
+f1 = f1_score(y_test, y_test_pred, average='micro')
+hamming = hamming_loss(y_test, y_test_pred)
+zero_one = zero_one_loss(y_test, y_test_pred)
+coverage = coverage_error(y_test, y_test_pred)
+conf_matrix = confusion_matrix(y_test.values.argmax(axis=1), y_test_pred.argmax(axis=1))
+classification_rep = classification_report(y_test.values.argmax(axis=1), y_test_pred.argmax(axis=1))
+lraps = label_ranking_average_precision_score(y_test, y_test_pred)
+jaccard = jaccard_score(y_true, y_test_pred, average='samples')
+# 9. 打印性能指标
+print(f"Test Accuracy: {accuracy}")
+print(f"Test Precision: {precision}")
+print(f"Test Recall: {recall}")
+print(f"Test F1 Score: {f1}")
+print(f"Test Hamming Loss: {hamming}")
+print(f"Test Zero-One Loss: {zero_one}")
+print(f"Test Coverage: {coverage}")
+print(f"Confusion Matrix:\n{conf_matrix}")
+print(f"Classification Report:\n{classification_rep}")
+print(f"Label Ranking Average Precision Score: {lraps}")
+print(f"Test jaccard: {jaccard}")
