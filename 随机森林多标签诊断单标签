@@ -1,0 +1,63 @@
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.ensemble import RandomForestClassifier
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np 
+from sklearn.metrics import hamming_loss, accuracy_score, multilabel_confusion_matrix,coverage_error, label_ranking_loss, average_precision_score, classification_report
+# 加载数据
+data_A = pd.read_csv('L:/experimental_data/data_combine/output_file/sampled_data_multi1.csv')
+data_B = pd.read_csv('L:/experimental_data/data_combine/output_file/sampled_data_single1.csv')
+# 数据预处理
+X_A = data_A.drop(['class1', 'class2', 'class3', 'class4'], axis=1)
+y_A = data_A[['class1', 'class2', 'class3', 'class4']]
+X_B = data_B.drop(['class1', 'class2', 'class3', 'class4'], axis=1)
+y_B = data_B[['class1', 'class2', 'class3', 'class4']]
+# 训练模型
+model = RandomForestClassifier()
+model.fit(X_A, y_A)
+# 预测
+predictions_B = model.predict(X_B)
+# 获取预测概率
+prediction_probs_B = model.predict_proba(X_B)
+prediction_probs_B = np.array([prob[:, 1] for prob in prediction_probs_B]).T
+# 转换为单标签预测结果
+single_label_predictions = np.argmax(prediction_probs_B, axis=1)
+# 性能评估
+coverageRate = coverage_error(y_B, prediction_probs_B)
+hammingLoss = hamming_loss(y_B, predictions_B)
+zeroOneLoss = 1 - accuracy_score(y_B, predictions_B, normalize=False)
+rankingLoss = label_ranking_loss(y_B, prediction_probs_B)
+avgPrecision = average_precision_score(y_B, prediction_probs_B)
+# 生成分类报告
+y_true_labels = y_B.to_numpy().argmax(axis=1)  # 将y_B转换为numpy数组并使用argmax
+report = classification_report(y_true_labels, single_label_predictions, target_names=['class1', 'class2', 'class3', 'class4'])
+print(report)  # 打印报告
+with open('classification_report.txt', 'w') as f:
+    f.write(report)  # 将报告写入文件
+# 保存结果
+results = pd.DataFrame({
+    'Coverage Rate': [coverageRate],
+    'Hamming Loss': [hammingLoss],
+    '0-1 Loss': [zeroOneLoss],
+    'Ranking Loss': [rankingLoss],
+    'Average Precision': [avgPrecision]
+})
+results.to_csv('L:/experimental_data/data_combine/output_file/randomforest/multi_single_top/performance_metrics.csv')
+# 组合真实标签和预测结果
+combined_results = pd.concat([y_B.reset_index(drop=True), pd.DataFrame(predictions_B, columns=['pred_class1', 'pred_class2', 'pred_class3', 'pred_class4'])], axis=1)
+combined_results.to_csv('L:/experimental_data/data_combine/output_file/randomforest/multi_single_top/combined_predictions.csv', index=False)
+# 绘制并保存混淆矩阵为图片
+def plot_confusion_matrix(cm, class_name, save_path,font_size=18):
+    plt.figure(figsize=(9, 7))
+    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=['Predicted Negative', 'Predicted Positive'], yticklabels=['Actual Negative', 'Actual Positive'], annot_kws={"size": font_size})
+    plt.ylabel('True Label', fontsize=font_size)
+    plt.xlabel('Predicted Label', fontsize=font_size)
+    plt.title(f'Confusion Matrix for {class_name}', fontsize=font_size + 2)
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    plt.savefig(save_path)
+    plt.close()
+for i, label in enumerate(['class1', 'class2', 'class3', 'class4']):
+    cm = multilabel_confusion_matrix(y_B, predictions_B)[i]
+    plot_confusion_matrix(cm, label, f'L:/experimental_data/data_combine/output_file/randomforest/multi_single_top/confusion_matrix_{label}.png')
