@@ -1,0 +1,96 @@
+import os
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+from skmultilearn.adapt import MLkNN
+from scipy.sparse import csr_matrix
+from sklearn.model_selection import train_test_split
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.multioutput import MultiOutputClassifier
+from sklearn.metrics import multilabel_confusion_matrix
+from sklearn.metrics import accuracy_score, classification_report
+from sklearn.metrics import hamming_loss,zero_one_loss, label_ranking_loss, average_precision_score
+plt.rcParams['font.sans-serif'] = ['SimHei']  # 用来正常显示中文标签
+plt.rcParams['axes.unicode_minus'] = False  # 用来正常显示负号
+train_df = pd.read_csv('L:/experimental_data/Quartile_dael_data/Categorize_with_algorithm/single_three_model/single_three.csv')
+train_df.head()
+X_train = train_df[['T_com_out','T_con_in','T_con_out','T_cap_in','T_cap_out','T_eva_in','T_eva_out','T_com_in','T_eva_outlet','power','P_com_out','P_com_in','P_cap_out','P_gap']].values
+y_train = train_df[['class1', 'class2', 'class3','class4']].values
+validation_df = pd.read_csv('L:/experimental_data/Quartile_dael_data/Categorize_with_algorithm/two_faults_without_T_con_outlet.csv')
+validation_df.head()
+X_validation = validation_df[['T_com_out','T_con_in','T_con_out','T_cap_in','T_cap_out','T_eva_in','T_eva_out','T_com_in','T_eva_outlet','power','P_com_out','P_com_in','P_cap_out','P_gap']].values
+y_validation = validation_df[['class1', 'class2', 'class3','class4']].values
+# 数据准备（转换为稀疏矩阵，MLkNN需要）
+X_train_sparse = csr_matrix(X_train)
+y_train_sparse = csr_matrix(y_train)
+X_validation_sparse = csr_matrix(X_validation)
+# 创建MLkNN模型 (例如：使用3个邻居)
+mlknn_model = MLkNN(k=3)
+# 训练模型
+mlknn_model.fit(X_train_sparse, y_train_sparse)
+# 预测测试集
+y_pred = mlknn_model.predict(X_validation_sparse)
+confusion_matrices = multilabel_confusion_matrix(y_validation, y_pred)
+output_folder = 'L:/experimental_data/Quartile_dael_data/Categorize_with_algorithm/three_model/mlknn'
+os.makedirs(output_folder, exist_ok=True)
+# 保存测试集预测结果为CSV文件
+predictions_df = pd.DataFrame(data=y_pred, columns=['predict1', 'predict2', 'predict3', 'predict4'])
+result_df = pd.concat([validation_df, predictions_df], axis=1)
+#导出预测结果数据集
+result_df.to_csv(os.path.join(output_folder, 'three_predictions_class.csv'), index=False)
+# 设置字体大小
+font_size = 18
+# 可视化混淆矩阵并保存到文件夹
+for i, conf_matrix in enumerate(confusion_matrices):
+    label_name = f'标签{i+1}'
+    conf_matrix_df = pd.DataFrame(conf_matrix, columns=[f'Actual_{label_name}_0', f'Actual_{label_name}_1'])
+    conf_matrix_df.to_csv(os.path.join(output_folder, f'confusion_matrix_{label_name}.csv'), index=False)
+    plt.figure(figsize=(9, 7))
+    sns.heatmap(conf_matrix, annot=True, fmt='d', cmap='Blues',
+                xticklabels=['0', '1'], yticklabels=['0', '1'],
+                annot_kws={"size": 20, "ha": 'center', "va": 'center'},
+                cbar_kws={"label": " ", "orientation": "vertical", "shrink": 1, "extend": "both", "anchor": (0.5, 1.0)}),
+    plt.title(f'混淆矩阵{i+1}', fontsize=20)
+    plt.xlabel('预测标签',fontsize=font_size)
+    plt.ylabel('实际标签',fontsize=font_size)
+     # 设置混淆矩阵标签字体大小
+    plt.xticks(fontsize=font_size)
+    plt.yticks(fontsize=font_size)
+    plt.savefig(os.path.join(output_folder, f'confusion_matrix_{label_name}.png'))
+    plt.close()
+print(f'混淆矩阵图已保存到文件夹: {output_folder}')
+# 通过手动计算，得到覆盖率和汉明损失
+coverage = sum([min(conf_matrix[1, :]) / len(y_validation) for conf_matrix in confusion_matrices]) / len(confusion_matrices)
+hamming_loss_value = hamming_loss(y_validation, y_pred)
+zero_one_loss_value = zero_one_loss(y_validation, y_pred)
+ranking_loss = label_ranking_loss(y_validation, y_pred)
+average_precision = average_precision_score(y_validation, y_pred)
+# 创建包含计算结果的DataFrame
+results_df = pd.DataFrame({'coverage': [coverage],
+                           'hamming loss': [hamming_loss_value],
+                           'one error': [zero_one_loss_value],
+                          'ranking loss': [ranking_loss],
+                          'average precision': [average_precision]})
+results_df.to_csv('L:/experimental_data/Quartile_dael_data/Categorize_with_algorithm/three_model/mlknn/three_evaluation.csv', index=False)
+# 评估模型性能
+accuracy = accuracy_score(y_validation, y_pred)
+print(f'Accuracy: {accuracy}')
+
+# 输出每个标签的分类报告
+print('Classification Report:')
+print(classification_report(y_validation, y_pred))
+# 生成分类报告
+classification_report_str = classification_report(y_validation, y_pred)
+
+# 创建图像并添加文本
+plt.figure(figsize=(10, 6))
+plt.text(0.01, 1.0, classification_report_str, fontsize=12, va='top')
+plt.axis('off')
+
+# 保存图像
+classification_report_image_path = 'L:/experimental_data/Quartile_dael_data/Categorize_with_algorithm/three_model/mlknn/three_classification_report.png'
+plt.savefig(classification_report_image_path, bbox_inches='tight')
+plt.close()
+
+print(f'分类报告已保存为图片: {classification_report_image_path}')
